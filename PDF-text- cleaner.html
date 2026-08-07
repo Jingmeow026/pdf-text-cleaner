@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>论文级 PDF 文本净化器 V6</title>
+  <style>
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: #f4f6fb;
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      padding: 40px 20px;
+      color: #333;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 960px;
+      background: #fff;
+      border-radius: 18px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.08);
+      padding: 32px;
+      position: relative;
+    }
+
+    h1 { margin: 0 0 10px; font-size: 28px; }
+
+    .desc {
+      margin-bottom: 18px;
+      color: #666;
+      line-height: 1.7;
+    }
+
+    .option-box {
+      background: #f8fafc;
+      border: 1px solid #e5e7eb;
+      border-radius: 12px;
+      padding: 14px;
+      margin-bottom: 18px;
+    }
+
+    .option-box label {
+      display: block;
+      margin-bottom: 8px;
+      cursor: pointer;
+    }
+
+    textarea {
+      width: 100%;
+      min-height: 200px;
+      border: 1px solid #d1d5db;
+      border-radius: 12px;
+      padding: 14px;
+      font-size: 15px;
+      resize: vertical;
+      line-height: 1.7;
+      outline: none;
+    }
+
+    textarea:focus { border-color: #2563eb; }
+
+    .section-title {
+      margin: 16px 0 8px;
+      font-weight: bold;
+    }
+
+    .btn-row {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+      margin-top: 10px;
+    }
+
+    button {
+      border: none;
+      border-radius: 10px;
+      padding: 10px 14px;
+      font-size: 14px;
+      cursor: pointer;
+      color: white;
+    }
+
+    .btn-clear { background: #64748b; }
+    .btn-copy { background: #16a34a; }
+
+    /* Toast 提示 */
+    .toast {
+      position: fixed;
+      left: 50%;
+      bottom: 40px;
+      transform: translateX(-50%);
+      background: rgba(0,0,0,0.75);
+      color: #fff;
+      padding: 10px 16px;
+      border-radius: 10px;
+      font-size: 14px;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.3s ease;
+    }
+
+    .toast.show {
+      opacity: 1;
+    }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <h1>论文级 PDF 文本净化器 V6</h1>
+
+  <div class="desc">
+    V6升级：保留段落 + 英文断行补空格 + 更稳的中英文标点处理
+  </div>
+
+  <div class="option-box">
+    <label><input type="checkbox" id="smartMerge" checked /> 智能去换行</label>
+    <label><input type="checkbox" id="removeHyphen" checked /> 英文断词修复</label>
+    <label><input type="checkbox" id="compressSpace" checked /> 空格压缩</label>
+    <label><input type="checkbox" id="normalizePunct" checked /> 标点统一（推荐）</label>
+  </div>
+
+  <div class="section-title">输入</div>
+  <textarea id="inputText" placeholder="粘贴PDF文本..."></textarea>
+
+  <div class="btn-row">
+    <button class="btn-clear" onclick="clearAll()">清空</button>
+  </div>
+
+  <div class="section-title">输出（自动生成）</div>
+  <textarea id="outputText" readonly></textarea>
+
+  <div class="btn-row">
+    <button class="btn-copy" onclick="copyOutput()">复制</button>
+  </div>
+</div>
+
+<div id="toast" class="toast">复制成功</div>
+
+<script>
+function isCJK(char) {
+  return /[\u4e00-\u9fff]/.test(char);
+}
+
+function isAsciiAlphaNum(char) {
+  return /[A-Za-z0-9]/.test(char);
+}
+
+function normalizePunctuation(text) {
+  const mapZh = { ',':'，','.':'。','?':'？','!':'！',';':'；',':':'：','(':'（',')':'）' };
+  let result = '';
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    const prev = text[i - 1] || '';
+    const next = text[i + 1] || '';
+
+    if (!mapZh[ch]) {
+      result += ch;
+      continue;
+    }
+
+    const nearAscii = isAsciiAlphaNum(prev) || isAsciiAlphaNum(next);
+    const hasCjkNeighbor = isCJK(prev) || isCJK(next);
+    const betweenDigits = /\d/.test(prev) && /\d/.test(next);
+    const keepAsciiParens = (ch === '(' || ch === ')') && nearAscii;
+    const keepAsciiPunct = /[.,?!;:]/.test(ch) && nearAscii && !hasCjkNeighbor;
+
+    if (betweenDigits || keepAsciiParens || keepAsciiPunct) {
+      result += ch;
+    } else {
+      result += mapZh[ch];
+    }
+  }
+  return result;
+}
+
+function mergeBrokenLines(text) {
+  const paragraphToken = '[[P]]';
+
+  return text
+    .replace(/\n{2,}/g, paragraphToken)
+    .replace(/([A-Za-z0-9)\].,;:!?])\n(?=[A-Za-z0-9([\"'])/g, '$1 ')
+    .replace(/([^\n])\n(?=[^\n])/g, '$1')
+    .replace(/\[\[P\]\]/g, '\n\n');
+}
+
+function cleanText(text) {
+  if (!text) return '';
+
+  const smartMerge = document.getElementById('smartMerge').checked;
+  const removeHyphen = document.getElementById('removeHyphen').checked;
+  const compressSpace = document.getElementById('compressSpace').checked;
+  const normalizePunct = document.getElementById('normalizePunct').checked;
+
+  text = text
+    .replace(/\u00A0/g,' ')
+    .replace(/\u200B/g,'')
+    .replace(/\t/g,' ')
+    .replace(/\r\n/g,'\n')
+    .replace(/\r/g,'\n');
+
+  if (removeHyphen) {
+    text = text.replace(/([a-zA-Z])\-\n([a-zA-Z])/g,'$1$2');
+  }
+
+  if (smartMerge) {
+    text = mergeBrokenLines(text);
+  }
+
+  if (compressSpace) {
+    text = text
+      .replace(/[ \f\v]{2,}/g,' ')
+      .replace(/ *\n */g,'\n');
+  }
+
+  text = text.replace(/([\u4e00-\u9fff])\s+([\u4e00-\u9fff])/g,'$1$2');
+  text = text.replace(/\s+([，。！？；：])/g,'$1');
+
+  if (normalizePunct) {
+    text = normalizePunctuation(text);
+  }
+
+  return text.trim();
+}
+
+const input = document.getElementById('inputText');
+const output = document.getElementById('outputText');
+const toast = document.getElementById('toast');
+
+input.addEventListener('input', () => {
+  output.value = cleanText(input.value);
+});
+
+function clearAll() {
+  input.value = '';
+  output.value = '';
+}
+
+function showToast(msg) {
+  toast.textContent = msg;
+  toast.classList.add('show');
+  setTimeout(() => {
+    toast.classList.remove('show');
+  }, 1500);
+}
+
+async function copyOutput() {
+  try {
+    await navigator.clipboard.writeText(output.value);
+    showToast('复制成功');
+  } catch (error) {
+    showToast('复制失败，请手动复制');
+  }
+}
+</script>
+
+</body>
+</html>
