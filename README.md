@@ -83,7 +83,9 @@ python app.py
 
 ## Demo
 
-（此处可以添加项目运行截图）
+<img width="1065" height="787" alt="image" src="https://github.com/user-attachments/assets/0a35b5c1-5738-4ba9-a603-871b63201f7e" />
+<img width="1019" height="771" alt="image" src="https://github.com/user-attachments/assets/56062479-e823-4efe-ad24-42b9219b0ad0" />
+
 
 ## 项目亮点
 
@@ -102,4 +104,4 @@ python app.py
 
 ## Author
 
-Created by [你的名字]
+Created by [Dijing]
